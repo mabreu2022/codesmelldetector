@@ -1,0 +1,74 @@
+unit uSugestoes;
+
+interface
+
+uses
+  uSmellTypes, System.SysUtils;
+
+procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
+
+implementation
+
+uses
+  System.Classes, System.IOUtils;
+
+function NormalizarNome(const Texto: string): string;
+begin
+  Result := StringReplace(Texto, ' ', '', [rfReplaceAll]);
+end;
+
+procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
+var
+  NomeArquivo: string;
+  Arq: TStringList;
+begin
+  NomeArquivo := Format('%s_Linha%d_%s.pas',
+    [TPath.GetFileNameWithoutExtension(Smell.Arquivo), Smell.Linha, NormalizarNome(Smell.Smell)]);
+
+  Arq := TStringList.Create;
+  try
+    Arq.Add('// Sugestão de correção para o smell: ' + Smell.Smell);
+    Arq.Add('// Arquivo original: ' + Smell.Arquivo);
+    Arq.Add('// Linha: ' + Smell.Linha.ToString);
+    Arq.Add('');
+    Arq.Add('// Trecho original:');
+    Arq.Add('// ------------------');
+    Arq.AddStrings(Smell.Trecho.Split([sLineBreak]));
+    Arq.Add('');
+    Arq.Add('// Sugestão:');
+
+    if Smell.Smell = 'Uso de with' then
+    begin
+      Arq.Add('// Evite "with". Refatore para acessar membros diretamente.');
+      Arq.Add('// Exemplo:');
+      Arq.Add('// MinhaClasse.Campo := 10;');
+    end
+    else if Smell.Smell = 'Método muito longo' then
+    begin
+      Arq.Add('// Divida o método em submétodos menores com nomes descritivos.');
+    end
+    else if Smell.Smell = 'Muitos parâmetros' then
+    begin
+      Arq.Add('// Agrupe os parâmetros em um record ou classe para melhorar a legibilidade.');
+    end
+    else if Smell.Smell = 'Variável global' then
+    begin
+      Arq.Add('// Encapsule a variável em uma classe ou use injeção de dependência.');
+    end
+    else if Smell.Smell = 'Uso de Application.ProcessMessages em loop' then
+    begin
+      Arq.Add('// Use threads ou timers para manter a interface responsiva.');
+    end
+    else
+    begin
+      Arq.Add('// Refatore conforme boas práticas de design.');
+    end;
+
+    TDirectory.CreateDirectory(PastaSugestoes);
+    Arq.SaveToFile(TPath.Combine(PastaSugestoes, NomeArquivo));
+  finally
+    Arq.Free;
+  end;
+end;
+
+end.

@@ -1,0 +1,40 @@
+unit uRelatorioHTML;
+
+interface
+
+uses
+  System.Generics.Collections, uSmellTypes;
+
+procedure SalvarRelatorioHTML(const Lista: TObjectList<TCodeSmell>; const FileName: string = 'resultado.html');
+
+implementation
+
+uses
+  System.Classes, System.SysUtils;
+
+procedure SalvarRelatorioHTML(const Lista: TObjectList<TCodeSmell>; const FileName: string);
+var
+  HTML: TStringList;
+  Smell: TCodeSmell;
+begin
+  HTML := TStringList.Create;
+  try
+    HTML.Add('<!DOCTYPE html>');
+    HTML.Add('<html><head><meta charset="utf-8"><title>Relatório de Code Smells</title>');
+    HTML.Add('<style>table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background:#f0f0f0;}</style>');
+    HTML.Add('</head><body>');
+    HTML.Add('<h2>Relatório de Code Smells</h2>');
+    HTML.Add('<table>');
+    HTML.Add('<tr><th>Arquivo</th><th>Smell</th><th>Linha</th></tr>');
+
+    for Smell in Lista do
+      HTML.Add(Format('<tr><td>%s</td><td>%s</td><td>%d</td></tr>', [Smell.Arquivo, Smell.Smell, Smell.Linha]));
+
+    HTML.Add('</table></body></html>');
+    HTML.SaveToFile(FileName);
+  finally
+    HTML.Free;
+  end;
+end;
+
+end.

@@ -1,0 +1,33 @@
+program CodeSmellDetector;
+
+{$APPTYPE CONSOLE}
+
+uses
+  System.SysUtils,
+  uAnalyzer in 'uAnalyzer.pas';
+
+var
+  Dir: string;
+begin
+  try
+    if ParamCount < 1 then
+    begin
+      Writeln('Uso: CodeSmellDetector <diretório>');
+      Exit;
+    end;
+
+    Dir := ParamStr(1);
+
+    if not DirectoryExists(Dir) then
+    begin
+      Writeln('Erro: diretório não encontrado: ', Dir);
+      Exit;
+    end;
+
+    Writeln('Analisando diretório: ', Dir);
+    AnalisarDiretorio(Dir);
+  except
+    on E: Exception do
+      Writeln('Erro durante a execução: ', E.Message);
+  end;
+end.

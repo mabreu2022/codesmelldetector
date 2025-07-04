@@ -1,0 +1,12 @@
+// Sugestão de correção para o smell: Uso de with
+// Arquivo original: c:\fontes\CRM\FSPix-VCL\uFrmPix.pas
+// Linha: 123
+
+// Trecho original:
+// ------------------
+With row.Items.Add do
+
+// Sugestão:
+// Evite "with". Refatore para acessar membros diretamente.
+// Exemplo:
+// MinhaClasse.Campo := 10;

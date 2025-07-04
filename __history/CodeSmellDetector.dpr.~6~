@@ -1,0 +1,43 @@
+program CodeSmellDetector;
+
+{$APPTYPE CONSOLE}
+
+uses
+  System.SysUtils,
+  System.IOUtils,
+  uAnalyzer in 'uAnalyzer.pas',
+  uRelatorioJSON in 'uRelatorioJSON.pas',
+  uRelatorioCSV in 'uRelatorioCSV.pas',
+  uRelatorioHTML in 'uRelatorioHTML.pas';
+
+var
+  Dir: string;
+
+begin
+  try
+    if ParamCount < 1 then
+    begin
+      Writeln('Uso: CodeSmellDetector <diretório>');
+      Exit;
+    end;
+
+    Dir := ParamStr(1);
+
+    if not TDirectory.Exists(Dir) then
+    begin
+      Writeln('Erro: diretório não encontrado: ', Dir);
+      Exit;
+    end;
+
+    Writeln('?? Iniciando análise no diretório: ', Dir);
+    AnalisarDiretorio(Dir);
+    Writeln('? Análise concluída com sucesso.');
+    Writeln('?? Relatórios gerados:');
+    Writeln(' - resultado.json');
+    Writeln(' - resultado.csv');
+    Writeln(' - resultado.html');
+  except
+    on E: Exception do
+      Writeln('? Erro durante a execução: ', E.Message);
+  end;
+end.

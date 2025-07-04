@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+  <Transactions>
+    <Transaction>2025/07/04 12:10:18.049,C:\FONTES\CodeSmellDetector\CodeSmellDetector.dproj=C:\Users\Mauricio Abreu\Documents\Embarcadero\Studio\Projects\Project1.dproj</Transaction>
+    <Transaction>2025/07/04 12:10:46.313,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:12:13.100,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:12:51.618,C:\FONTES\CodeSmellDetector\uAnalyzer.pas=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:13:50.544,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:13:58.439,C:\FONTES\CodeSmellDetector\uSmellTypes.pas=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:28:24.334,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:28:35.161,C:\FONTES\CodeSmellDetector\uRelatorioJSON.pas=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:28:54.517,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:29:03.282,C:\FONTES\CodeSmellDetector\uRelatorioCSV.pas=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:29:17.263,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:29:28.028,C:\FONTES\CodeSmellDetector\uRelatorioHTML.pas=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:39:09.737,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:39:25.969,C:\FONTES\CodeSmellDetector\uSugestoes.pas=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:52:07.138,=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+    <Transaction>2025/07/04 12:52:18.047,C:\FONTES\CodeSmellDetector\uProjeto.pas=C:\FONTES\CodeSmellDetector\Unit1.pas</Transaction>
+  </Transactions>
+</BorlandProject>

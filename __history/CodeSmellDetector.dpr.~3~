@@ -1,0 +1,29 @@
+program CodeSmellDetector;
+
+{$APPTYPE CONSOLE}
+
+uses
+  System.SysUtils,
+  System.IOUtils,
+  System.Classes,
+  uAnalyzer in 'uAnalyzer.pas',
+  uSmellTypes in 'uSmellTypes.pas';
+
+var
+  Dir: string;
+begin
+  if ParamCount < 1 then
+  begin
+    Writeln('Uso: CodeSmellDetector <diretório>');
+    Exit;
+  end;
+
+  Dir := ParamStr(1);
+  if not TDirectory.Exists(Dir) then
+  begin
+    Writeln('Diretório inválido.');
+    Exit;
+  end;
+
+  AnalisarDiretorio(Dir);
+end.

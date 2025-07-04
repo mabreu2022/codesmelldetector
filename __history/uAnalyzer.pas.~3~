@@ -1,0 +1,114 @@
+unit uAnalyzer;
+
+interface
+
+procedure AnalisarDiretorio(const Dir: string);
+
+implementation
+
+uses
+  System.SysUtils, System.IOUtils, System.Classes, System.RegularExpressions, System.JSON,
+  uSmellTypes;
+
+procedure AdicionarSmell(JsonArray: TJSONArray; const Arquivo, Tipo: string; Linha: Integer);
+var
+  Smell: TCodeSmell;
+begin
+  Smell := TCodeSmell.Create;
+  try
+    Smell.Arquivo := Arquivo;
+    Smell.Smell := Tipo;
+    Smell.Linha := Linha;
+    JsonArray.AddElement(Smell.ToJSON);
+  finally
+    Smell.Free;
+  end;
+end;
+
+procedure AnalisarArquivo(const FileName: string; JsonArray: TJSONArray);
+var
+  Lines: TStringList;
+  i, ParamCount, MethodStart, MethodEnd: Integer;
+  Line, CurrentMethod: string;
+  InMethod, InLoop: Boolean;
+begin
+  Lines := TStringList.Create;
+  try
+    Lines.LoadFromFile(FileName);
+    InMethod := False;
+    InLoop := False;
+
+    for i := 0 to Lines.Count - 1 do
+    begin
+      Line := Trim(Lines[i]);
+
+      // Detecta início de método
+      if TRegEx.IsMatch(Line, 'function|procedure', [roIgnoreCase]) and not InMethod then
+      begin
+        InMethod := True;
+        MethodStart := i;
+        CurrentMethod := Line;
+
+        // Conta parâmetros
+        ParamCount := TRegEx.Matches(Line, ':').Count;
+        if ParamCount > 5 then
+          AdicionarSmell(JsonArray, FileName, 'Muitos parâmetros', i + 1);
+      end;
+
+      // Detecta fim de método
+      if InMethod and (Line = 'end;') then
+      begin
+        InMethod := False;
+        MethodEnd := i;
+        if (MethodEnd - MethodStart) > 50 then
+          AdicionarSmell(JsonArray, FileName, 'Método muito longo', MethodStart + 1);
+      end;
+
+      // Uso de "with"
+      if Line.ToLower.StartsWith('with') then
+        AdicionarSmell(JsonArray, FileName, 'Uso de with', i + 1);
+
+      // Variáveis globais
+      if Line.ToLower.StartsWith('var') and (i > 0) and (Lines[i - 1].ToLower.Contains('interface')) then
+        AdicionarSmell(JsonArray, FileName, 'Variável global', i + 1);
+
+      // Application.ProcessMessages em loop
+      if Line.ToLower.Contains('for ') or Line.ToLower.Contains('while ') then
+        InLoop := True;
+
+      if InLoop and Line.ToLower.Contains('application.processmessages') then
+        AdicionarSmell(JsonArray, FileName, 'Uso de Application.ProcessMessages em loop', i + 1);
+
+      if Line = '' then
+        InLoop := False;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+procedure AnalisarDiretorio(const Dir: string);
+var
+  Files: TArray<string>;
+  FileName: string;
+  JsonArray: TJSONArray;
+  JsonStr: TStringList;
+begin
+  Files := TDirectory.GetFiles(Dir, '*.pas', TSearchOption.soAllDirectories);
+  JsonArray := TJSONArray.Create;
+
+  for FileName in Files do
+    AnalisarArquivo(FileName, JsonArray);
+
+  JsonStr := TStringList.Create;
+  try
+    JsonStr.Text := JsonArray.ToJSON;
+    JsonStr.SaveToFile('resultado.json');
+    Writeln('Análise concluída. Resultado salvo em resultado.json');
+  finally
+    JsonStr.Free;
+    JsonArray.Free;
+  end;
+end;
+
+end.
