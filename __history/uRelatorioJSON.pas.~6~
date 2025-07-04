@@ -1,0 +1,119 @@
+unit uSugestoes;
+
+interface
+
+uses
+  uSmellTypes, System.SysUtils;
+
+procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
+
+implementation
+
+uses
+  System.Classes, System.IOUtils, uIARefatorador, System.Threading, System.DateUtils;
+
+function NormalizarNome(const Texto: string): string;
+begin
+  Result := StringReplace(Texto, ' ', '', [rfReplaceAll]);
+end;
+
+function ExtrairNomeMetodo(const Trecho: string): string;
+var
+  Linha: string;
+  i: Integer;
+begin
+  Result := '[método não identificado]';
+  for Linha in Trecho.Split([sLineBreak]) do
+  begin
+    Linha := Trim(Linha);
+    if (Linha.StartsWith('procedure', True)) or (Linha.StartsWith('function', True)) then
+    begin
+      i := Pos('(', Linha);
+      if i > 0 then
+        Result := Copy(Linha, 1, i - 1)
+      else
+        Result := Linha;
+      Exit;
+    end;
+  end;
+end;
+
+procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
+var
+  NomeArquivo: string;
+  Arq: TStringList;
+begin
+  NomeArquivo := Format('%s_Linha%d_%s.pas',
+    [TPath.GetFileNameWithoutExtension(Smell.Arquivo), Smell.Linha, NormalizarNome(Smell.Smell)]);
+
+  Arq := TStringList.Create;
+  try
+    Arq.Add('// Sugestão de correção para o smell: ' + Smell.Smell);
+    Arq.Add('// Arquivo original: ' + Smell.Arquivo);
+    Arq.Add('// Linha: ' + Smell.Linha.ToString);
+    Arq.Add('');
+    Arq.Add('// Trecho original:');
+    Arq.Add('// ------------------');
+    Arq.AddStrings(Smell.Trecho.Split([sLineBreak]));
+    Arq.Add('');
+
+    Arq.Add('// Sugestão:');
+
+    if Smell.Smell = 'Método muito longo' then
+    begin
+      Arq.Add('// Divida o método em submétodos menores com nomes descritivos.');
+      Arq.Add('');
+      Arq.Add('// Sugestão refatorada:');
+      Arq.Add('// ---------------------');
+
+      TTask.Run(
+        procedure
+        var
+          Refatorado, NomeMetodo: string;
+          StartTime, EndTime: TDateTime;
+          ElapsedMs: Integer;
+        begin
+          try
+            NomeMetodo := ExtrairNomeMetodo(Smell.Trecho);
+            Writeln(Format('?? Refatorando %s (linha %d)...', [NomeMetodo, Smell.Linha]));
+
+            StartTime := Now;
+            Refatorado := RefatorarMetodoCopilot(Smell.Trecho);
+            EndTime := Now;
+            ElapsedMs := MilliSecondsBetween(EndTime, StartTime);
+
+            TThread.Synchronize(nil,
+              procedure
+              begin
+                Arq.AddStrings(Refatorado.Split([sLineBreak]));
+                Arq.SaveToFile(TPath.Combine(PastaSugestoes, NomeArquivo));
+                Writeln(Format('? %s refatorado em %d ms', [NomeMetodo, ElapsedMs]));
+              end);
+          except
+            on E: Exception do
+            begin
+              TThread.Synchronize(nil,
+                procedure
+                begin
+                  Arq.Add('// [Erro ao gerar sugestão automática]');
+                  Arq.Add('// ' + E.Message);
+                  Arq.SaveToFile(TPath.Combine(PastaSugestoes, NomeArquivo));
+                  Writeln(Format('? Erro ao refatorar %s: %s', [NomeMetodo, E.Message]));
+                end);
+            end;
+          end;
+        end
+      );
+    end
+    else
+    begin
+      Arq.Add('// Refatore conforme boas práticas de design.');
+      TDirectory.CreateDirectory(PastaSugestoes);
+      Arq.SaveToFile(TPath.Combine(PastaSugestoes, NomeArquivo));
+    end;
+  finally
+    Arq.Free;
+  end;
+end;
+
+end.

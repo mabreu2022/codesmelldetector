@@ -6,8 +6,7 @@ uses
   System.JSON;
 
 type
-  TCodeSmell = class
-  public
+  TCodeSmell = record
     Arquivo: string;
     Smell: string;
     Linha: Integer;

@@ -11,7 +11,11 @@ uses
   uRelatorioHTML in 'uRelatorioHTML.pas',
   uProjeto in 'uProjeto.pas',
   uSugestoes in 'uSugestoes.pas',
-  uSmellTypes in 'uSmellTypes.pas';
+  uSmellTypes in 'uSmellTypes.pas',
+  uIARefatorador in 'uIARefatorador.pas',
+  Xml.omnixmldom in 'Xml.omnixmldom.pas';
+
+// ? integração com IA local
 
 var
   Dir, ExecutavelPath, PastaRelatorios: string;
@@ -20,7 +24,7 @@ begin
   try
     if ParamCount < 1 then
     begin
-      Writeln('Uso: CodeSmellDetector <diretório do projeto>');
+      Writeln('Uso: CodeSmellDetector <diretório do projeto Delphi>');
       Exit;
     end;
 
@@ -41,7 +45,7 @@ begin
     Writeln('?? Iniciando análise do projeto em: ', Dir);
     AnalisarDiretorio(Dir, PastaRelatorios);
     Writeln('? Análise concluída com sucesso.');
-    Writeln('?? Relatórios gerados em: ', PastaRelatorios);
+    Writeln('?? Relatórios e sugestões gerados em: ', PastaRelatorios);
   except
     on E: Exception do
       Writeln('? Erro durante a execução: ', E.Message);

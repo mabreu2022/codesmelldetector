@@ -3,29 +3,28 @@ unit uRelatorioCSV;
 interface
 
 uses
-  System.Generics.Collections, uSmellTypes;
+  uSmellTypes, System.SysUtils;
 
-procedure SalvarRelatorioCSV(const Lista: TObjectList<TCodeSmell>; const CaminhoCompleto: string);
+procedure GerarRelatorioCSV(const Smells: TArray<TCodeSmell>; const Caminho: string);
 
 implementation
 
 uses
-  System.Classes, System.SysUtils;
+  System.Classes;
 
-procedure SalvarRelatorioCSV(const Lista: TObjectList<TCodeSmell>; const CaminhoCompleto: string);
+procedure GerarRelatorioCSV(const Smells: TArray<TCodeSmell>; const Caminho: string);
 var
-  CSV: TStringList;
+  Arq: TStringList;
   Smell: TCodeSmell;
 begin
-  CSV := TStringList.Create;
+  Arq := TStringList.Create;
   try
-    CSV.Add('Arquivo;Smell;Linha;Trecho');
-    for Smell in Lista do
-      CSV.Add(Format('%s;%s;%d;"%s"',
-        [Smell.Arquivo, Smell.Smell, Smell.Linha, StringReplace(Smell.Trecho, '"', '""', [rfReplaceAll])]));
-    CSV.SaveToFile(CaminhoCompleto);
+    Arq.Add('Arquivo;Smell;Linha;Trecho');
+    for Smell in Smells do
+      Arq.Add(Format('%s;%s;%d;"%s"', [Smell.Arquivo, Smell.Smell, Smell.Linha, Smell.Trecho]));
+    Arq.SaveToFile(Caminho, TEncoding.UTF8);
   finally
-    CSV.Free;
+    Arq.Free;
   end;
 end;
 

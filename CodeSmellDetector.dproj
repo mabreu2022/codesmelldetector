@@ -159,6 +159,10 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1_Win32)'!=''">
         <DCC_RemoteDebug>false</DCC_RemoteDebug>
+        <DCC_UnitSearchPath>$(BDS)\source\xml;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <Manifest_File>(None)</Manifest_File>
+        <AppDPIAwarenessMode>none</AppDPIAwarenessMode>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
@@ -177,6 +181,8 @@
         <DCCReference Include="uProjeto.pas"/>
         <DCCReference Include="uSugestoes.pas"/>
         <DCCReference Include="uSmellTypes.pas"/>
+        <DCCReference Include="uIARefatorador.pas"/>
+        <DCCReference Include="Xml.omnixmldom.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

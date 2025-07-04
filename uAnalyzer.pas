@@ -1,118 +1,106 @@
-unit uAnalyzer;
+                                                                  unit uAnalyzer;
 
 interface
 
-procedure AnalisarDiretorio(const Dir, PastaRelatorios: string);
+uses
+  System.SysUtils, System.Classes, System.Generics.Collections, uSmellTypes;
+
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
 
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.Classes, System.RegularExpressions, System.JSON,
-  System.Generics.Collections,
-  uSmellTypes, uRelatorioJSON, uRelatorioCSV, uRelatorioHTML, uSugestoes;
+  System.IOUtils, uProjeto, uRelatorioJSON, uRelatorioCSV, uRelatorioHTML, uSugestoes;
 
-procedure AdicionarSmell(JsonArray: TJSONArray; Lista: TObjectList<TCodeSmell>;
-  const Arquivo, Tipo: string; Linha: Integer; const Trecho: string);
+function DetectarSmells(const Arquivo: string): TList<TCodeSmell>;
 var
+  Linhas: TStringList;
+  i: Integer;
+  Linha: string;
   Smell: TCodeSmell;
 begin
-  Smell := TCodeSmell.Create;
-  Smell.Arquivo := Arquivo;
-  Smell.Smell := Tipo;
-  Smell.Linha := Linha;
-  Smell.Trecho := Trecho;
-  JsonArray.AddElement(Smell.ToJSON);
-  Lista.Add(Smell);
-end;
-
-procedure AnalisarArquivo(const FileName: string; JsonArray: TJSONArray; Lista: TObjectList<TCodeSmell>);
-var
-  Lines: TStringList;
-  i, j, ParamCount, MethodStart, MethodEnd: Integer;
-  Line, CurrentMethod, Trecho: string;
-  InMethod, InLoop: Boolean;
-begin
-  Lines := TStringList.Create;
+  Result := TList<TCodeSmell>.Create;
+  Linhas := TStringList.Create;
   try
-    Lines.LoadFromFile(FileName);
-    InMethod := False;
-    InLoop := False;
-
-    for i := 0 to Lines.Count - 1 do
+    Linhas.LoadFromFile(Arquivo, TEncoding.UTF8);
+    for i := 0 to Linhas.Count - 1 do
     begin
-      Line := Trim(Lines[i]);
+      Linha := Linhas[i];
 
-      if TRegEx.IsMatch(Line, 'function|procedure', [roIgnoreCase]) and not InMethod then
+      // Smell: uso de with
+      if Trim(Linha).StartsWith('with ', True) then
       begin
-        InMethod := True;
-        MethodStart := i;
-        CurrentMethod := Line;
-
-        ParamCount := TRegEx.Matches(Line, ':').Count;
-        if ParamCount > 5 then
-          AdicionarSmell(JsonArray, Lista, FileName, 'Muitos parâmetros', i + 1, Line);
+        Smell.Arquivo := Arquivo;
+        Smell.Smell := 'Uso de with';
+        Smell.Linha := i + 1;
+        Smell.Trecho := Linha;
+        Result.Add(Smell);
       end;
 
-      if InMethod and (Line = 'end;') then
+      // Smell: método muito longo (simples heurística)
+      if Trim(Linha).StartsWith('procedure ', True) or Trim(Linha).StartsWith('function ', True) then
       begin
-        InMethod := False;
-        MethodEnd := i;
-        if (MethodEnd - MethodStart) > 50 then
+        var j := i + 1;
+        var Contador := 1;
+        while (j < Linhas.Count) and (not Trim(Linhas[j]).StartsWith('end', True)) do
         begin
-          Trecho := '';
-          for j := MethodStart to MethodEnd do
-            Trecho := Trecho + Lines[j] + sLineBreak;
-          AdicionarSmell(JsonArray, Lista, FileName, 'Método muito longo', MethodStart + 1, Trecho);
+          Inc(Contador);
+          Inc(j);
+        end;
+
+        if Contador > 30 then
+        begin
+          Smell.Arquivo := Arquivo;
+          Smell.Smell := 'Método muito longo';
+          Smell.Linha := i + 1;
+          Smell.Trecho := '';
+          for var k := i to j do
+            Smell.Trecho := Smell.Trecho + Linhas[k] + sLineBreak;
+          Result.Add(Smell);
         end;
       end;
-
-      if Line.ToLower.StartsWith('with') then
-        AdicionarSmell(JsonArray, Lista, FileName, 'Uso de with', i + 1, Line);
-
-      if Line.ToLower.StartsWith('var') and (i > 0) and (Lines[i - 1].ToLower.Contains('interface')) then
-        AdicionarSmell(JsonArray, Lista, FileName, 'Variável global', i + 1, Line);
-
-      if Line.ToLower.Contains('for ') or Line.ToLower.Contains('while ') then
-        InLoop := True;
-
-      if InLoop and Line.ToLower.Contains('application.processmessages') then
-        AdicionarSmell(JsonArray, Lista, FileName, 'Uso de Application.ProcessMessages em loop', i + 1, Line);
-
-      if Line = '' then
-        InLoop := False;
     end;
   finally
-    Lines.Free;
+    Linhas.Free;
   end;
 end;
 
-procedure AnalisarDiretorio(const Dir, PastaRelatorios: string);
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
 var
-  Files: TArray<string>;
-  FileName: string;
-  JsonArray: TJSONArray;
-  ListaSmells: TObjectList<TCodeSmell>;
+  Arquivos: TArray<string>;
+  Smells: TList<TCodeSmell>;
+  TodosSmells: TList<TCodeSmell>;
   Smell: TCodeSmell;
-  PastaSugestoes: string;
+  RelatorioJSON, RelatorioCSV, RelatorioHTML: string;
 begin
-  Files := TDirectory.GetFiles(Dir, '*.pas', TSearchOption.soAllDirectories);
-  JsonArray := TJSONArray.Create;
-  ListaSmells := TObjectList<TCodeSmell>.Create(True);
-
+  Arquivos := ObterArquivosDoProjeto(Diretorio); // ? correto
+  TodosSmells := TList<TCodeSmell>.Create;
   try
-    for FileName in Files do
-      AnalisarArquivo(FileName, JsonArray, ListaSmells);
+    for var Arq in Arquivos do
+    begin
+      Smells := DetectarSmells(Arq);
+      try
+        TodosSmells.AddRange(Smells);
+      finally
+        Smells.Free;
+      end;
+    end;
 
-    SalvarRelatorioJSON(JsonArray, TPath.Combine(PastaRelatorios, 'resultado.json'));
-    SalvarRelatorioCSV(ListaSmells, TPath.Combine(PastaRelatorios, 'resultado.csv'));
-    SalvarRelatorioHTML(ListaSmells, TPath.Combine(PastaRelatorios, 'resultado.html'));
+    // Gerar relatórios
+    RelatorioJSON := TPath.Combine(PastaRelatorios, 'relatorio.json');
+    RelatorioCSV := TPath.Combine(PastaRelatorios, 'relatorio.csv');
+    RelatorioHTML := TPath.Combine(PastaRelatorios, 'relatorio.html');
 
-    PastaSugestoes := TPath.Combine(PastaRelatorios, 'sugestoes');
-    for Smell in ListaSmells do
-      GerarSugestao(Smell, PastaSugestoes);
+    GerarRelatorioJSON(TodosSmells.ToArray, RelatorioJSON);
+    GerarRelatorioCSV(TodosSmells.ToArray, RelatorioCSV);
+    GerarRelatorioHTML(TodosSmells.ToArray, RelatorioHTML);
+
+    // Gerar sugestões
+    for Smell in TodosSmells do
+      GerarSugestao(Smell, PastaRelatorios);
+
   finally
-    JsonArray.Free;
-    ListaSmells.Free;
+    TodosSmells.Free;
   end;
 end;
 

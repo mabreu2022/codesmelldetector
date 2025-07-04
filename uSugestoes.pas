@@ -10,17 +10,109 @@ procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
 implementation
 
 uses
-  System.Classes, System.IOUtils;
+  System.Classes, System.IOUtils, uIARefatorador, System.Threading, System.DateUtils;
+
+type
+  TSugestaoTask = class
+  private
+    FSmell: TCodeSmell;
+    FPasta: string;
+    FArquivoBase: TStringList;
+    procedure Executar;
+  public
+    constructor Create(const ASmell: TCodeSmell; const APasta: string; const ABase: TStringList);
+    procedure Start;
+  end;
 
 function NormalizarNome(const Texto: string): string;
 begin
   Result := StringReplace(Texto, ' ', '', [rfReplaceAll]);
 end;
 
+function ExtrairNomeMetodo(const Trecho: string): string;
+var
+  Linhas: TArray<string>;
+  i, p: Integer;
+  Linha: string;
+begin
+  Result := '[método não identificado]';
+  Linhas := Trecho.Split([sLineBreak]);
+  for i := 0 to High(Linhas) do
+  begin
+    Linha := Trim(Linhas[i]);
+    if (Linha.StartsWith('procedure', True)) or (Linha.StartsWith('function', True)) then
+    begin
+      p := Pos('(', Linha);
+      if p > 0 then
+        Result := Copy(Linha, 1, p - 1)
+      else
+        Result := Linha;
+      Exit;
+    end;
+  end;
+end;
+
+constructor TSugestaoTask.Create(const ASmell: TCodeSmell; const APasta: string; const ABase: TStringList);
+begin
+  FSmell := ASmell;
+  FPasta := APasta;
+  FArquivoBase := TStringList.Create;
+  FArquivoBase.Assign(ABase);
+end;
+
+procedure TSugestaoTask.Start;
+begin
+  TTask.Run(procedure begin Executar; end);
+end;
+
+procedure TSugestaoTask.Executar;
+var
+  Refatorado, NomeMetodo: string;
+  StartTime, EndTime: TDateTime;
+  ElapsedMs: Integer;
+  TextoFinal: TStringList;
+  NomeArquivo: string;
+begin
+  NomeMetodo := ExtrairNomeMetodo(FSmell.Trecho);
+  Writeln(Format('?? Refatorando %s (linha %d)...', [NomeMetodo, FSmell.Linha]));
+
+  StartTime := Now;
+  try
+    Refatorado := RefatorarMetodoCopilot(FSmell.Trecho);
+  except
+    on E: Exception do
+    begin
+      Refatorado := '// [Erro ao gerar sugestão automática]' + sLineBreak + '// ' + E.Message;
+    end;
+  end;
+  EndTime := Now;
+  ElapsedMs := MilliSecondsBetween(EndTime, StartTime);
+
+  TextoFinal := TStringList.Create;
+  try
+    TextoFinal.AddStrings(FArquivoBase);
+    TextoFinal.AddStrings(Refatorado.Split([sLineBreak]));
+
+    NomeArquivo := Format('%s_Linha%d_%s.pas',
+      [TPath.GetFileNameWithoutExtension(FSmell.Arquivo), FSmell.Linha, NormalizarNome(FSmell.Smell)]);
+
+    TThread.Synchronize(nil,
+      procedure
+      begin
+        TextoFinal.SaveToFile(TPath.Combine(FPasta, NomeArquivo));
+        Writeln(Format('? %s refatorado em %d ms', [NomeMetodo, ElapsedMs]));
+      end);
+  finally
+    TextoFinal.Free;
+    FArquivoBase.Free;
+  end;
+end;
+
 procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
 var
   NomeArquivo: string;
   Arq: TStringList;
+  Task: TSugestaoTask;
 begin
   NomeArquivo := Format('%s_Linha%d_%s.pas',
     [TPath.GetFileNameWithoutExtension(Smell.Arquivo), Smell.Linha, NormalizarNome(Smell.Smell)]);
@@ -37,35 +129,22 @@ begin
     Arq.Add('');
     Arq.Add('// Sugestão:');
 
-    if Smell.Smell = 'Uso de with' then
-    begin
-      Arq.Add('// Evite "with". Refatore para acessar membros diretamente.');
-      Arq.Add('// Exemplo:');
-      Arq.Add('// MinhaClasse.Campo := 10;');
-    end
-    else if Smell.Smell = 'Método muito longo' then
+    if Smell.Smell = 'Método muito longo' then
     begin
       Arq.Add('// Divida o método em submétodos menores com nomes descritivos.');
-    end
-    else if Smell.Smell = 'Muitos parâmetros' then
-    begin
-      Arq.Add('// Agrupe os parâmetros em um record ou classe para melhorar a legibilidade.');
-    end
-    else if Smell.Smell = 'Variável global' then
-    begin
-      Arq.Add('// Encapsule a variável em uma classe ou use injeção de dependência.');
-    end
-    else if Smell.Smell = 'Uso de Application.ProcessMessages em loop' then
-    begin
-      Arq.Add('// Use threads ou timers para manter a interface responsiva.');
+      Arq.Add('');
+      Arq.Add('// Sugestão refatorada:');
+      Arq.Add('// ---------------------');
+
+      Task := TSugestaoTask.Create(Smell, PastaSugestoes, Arq);
+      Task.Start;
     end
     else
     begin
       Arq.Add('// Refatore conforme boas práticas de design.');
+      TDirectory.CreateDirectory(PastaSugestoes);
+      Arq.SaveToFile(TPath.Combine(PastaSugestoes, NomeArquivo));
     end;
-
-    TDirectory.CreateDirectory(PastaSugestoes);
-    Arq.SaveToFile(TPath.Combine(PastaSugestoes, NomeArquivo));
   finally
     Arq.Free;
   end;
