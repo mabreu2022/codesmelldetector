@@ -3,18 +3,18 @@
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections, uSmellTypes, Math;
+  System.SysUtils, System.Classes, System.Generics.Collections, uSmellTypes, math;
 
 procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
 
 implementation
 
 uses
-  System.IOUtils, System.Threading, uProjeto, uSugestoes, uLogger;
+  System.IOUtils, System.Threading, uProjeto, uSugestoes, uLogger, uProgresso;
 
 const
   TAMANHO_MAXIMO_ARQUIVO = 5 * 1024 * 1024; // 5 MB
-  NUM_WORKERS = 2;
+  NUM_WORKERS = 1;
 
 function EhArquivoTexto(const FileName: string): Boolean;
 var
@@ -103,72 +103,83 @@ var
   Smell: TCodeSmell;
   FilaSmells: TQueue<TCodeSmell>;
   Tarefas: array of ITask;
-  i: Integer;
+  i, j: Integer;
+  InnerErrors: TArray<Exception>;
+  Inner: Exception;
 begin
   Arquivos := ObterArquivosDoProjeto(Diretorio);
   FilaSmells := TQueue<TCodeSmell>.Create;
 
-  try
-    for var Arq in Arquivos do
+  for var Arq in Arquivos do
+  begin
+    Log('🔎 Analisando arquivo: ' + Arq);
+    try
+      Smells := DetectarTodosMetodos(Arq);
+      Log(Format('📄 %d métodos detectados em %s', [Smells.Count, Arq]));
+    except
+      on E: Exception do
+      begin
+        LogErro('❌ Erro ao analisar ' + Arq + ': ' + E.ClassName + ' - ' + E.Message);
+        Continue;
+      end;
+    end;
+
+    for Smell in Smells do
     begin
-      Log('🔎 Analisando arquivo: ' + Arq);
-      try
-        Smells := DetectarTodosMetodos(Arq);
-        Log(Format('📄 %d métodos detectados em %s', [Smells.Count, Arq]));
-      except
-        on E: Exception do
-        begin
-          LogErro('❌ Erro ao analisar ' + Arq + ': ' + E.ClassName + ' - ' + E.Message);
-          Continue;
-        end;
+      if JaProcessado(Smell, PastaRelatorios) then
+      begin
+        Log('⏭️ Pulando (já processado): ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString);
+        Continue;
       end;
 
-      for Smell in Smells do
-        FilaSmells.Enqueue(Smell);
-
-      Smells.Free;
-      Log(Format('🧠 Memória usada: %.2f MB', [GetHeapStatus.TotalAllocated / 1024 / 1024]));
+      Log('📥 Enfileirado: ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString);
+      FilaSmells.Enqueue(Smell);
     end;
 
-    SetLength(Tarefas, NUM_WORKERS);
-    for i := 0 to NUM_WORKERS - 1 do
+    Smells.Free;
+    Log(Format('🧠 Memória usada: %.2f MB', [GetHeapStatus.TotalAllocated / 1024 / 1024]));
+  end;
+
+  SetLength(Tarefas, NUM_WORKERS);
+  for i := 0 to NUM_WORKERS - 1 do
+  begin
+    Tarefas[i] := TTask.Run(procedure
+    var
+      Smell: TCodeSmell;
+      Trecho: string;
     begin
-      Tarefas[i] := TTask.Run(
-        procedure
-        var
-          SmellLocal: TCodeSmell;
-          Trecho: string;
-        begin
-          while True do
+      while True do
+      begin
+        TMonitor.Enter(FilaSmells);
+        try
+          if FilaSmells.Count = 0 then Break;
+          Smell := FilaSmells.Dequeue;
+        finally
+          TMonitor.Exit(FilaSmells);
+        end;
+
+        Trecho := Smell.Trecho;
+        Log('⚙️ Refatorando: ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString);
+        try
+          GerarSugestao(Smell, PastaRelatorios);
+          RegistrarProgresso(Smell, PastaRelatorios);
+          Log('✅ Sugestão gerada para: ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString);
+        except
+          on E: Exception do
           begin
-            TMonitor.Enter(FilaSmells);
-            try
-              if FilaSmells.Count = 0 then Break;
-              SmellLocal := FilaSmells.Dequeue;
-            finally
-              TMonitor.Exit(FilaSmells);
-            end;
-
-            Trecho := SmellLocal.Trecho;
-            Log('⚙️ Refatorando: ' + SmellLocal.Arquivo + ' linha ' + SmellLocal.Linha.ToString);
-            try
-              GerarSugestao(SmellLocal, PastaRelatorios);
-              Log('✅ Sugestão gerada para: ' + SmellLocal.Arquivo + ' linha ' + SmellLocal.Linha.ToString);
-            except
-              on E: Exception do
-              begin
-                LogErro('❌ Erro ao refatorar ' + SmellLocal.Arquivo + ' linha ' + SmellLocal.Linha.ToString + ': ' + E.Message);
-                if Length(Trecho) > 500 then
-                  Trecho := Copy(Trecho, 1, 500) + '...';
-                Log('🧩 Trecho problemático:');
-                Log(Trecho);
-              end;
-            end;
+            LogErro('❌ Erro ao refatorar ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString + ': ' + E.Message);
+            RegistrarErro(Smell, PastaRelatorios);
+            if Length(Trecho) > 500 then
+              Trecho := Copy(Trecho, 1, 500) + '...';
+            Log('🧩 Trecho problemático:');
+            Log(Trecho);
           end;
-        end);
-    end;
+        end;
+      end;
+    end);
+  end;
 
-    try
+   try
       TTask.WaitForAll(Tarefas);
     except
       on E: EAggregateException do
@@ -180,12 +191,8 @@ begin
         LogErro('❌ Erro inesperado: ' + E.ClassName + ' - ' + E.Message);
     end;
 
-  finally
-    FilaSmells.Free;
-  end;
-
+  FilaSmells.Free;
   Log('✅ Análise concluída.');
 end;
 
 end.
-

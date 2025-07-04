@@ -17,7 +17,8 @@ uses
   uConversorUTF8 in 'uConversorUTF8.pas',
   uLogger in 'uLogger.pas',
   uBackup in 'uBackup.pas',
-  Xml.omnixmldom in 'Xml.omnixmldom.pas';
+  Xml.omnixmldom in 'Xml.omnixmldom.pas',
+  uProgresso in 'uProgresso.pas';
 
 function CopiarProjetoParaTemp(const Origem: string): string;
 var

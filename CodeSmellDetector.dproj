@@ -186,6 +186,7 @@
         <DCCReference Include="uLogger.pas"/>
         <DCCReference Include="uBackup.pas"/>
         <DCCReference Include="Xml.omnixmldom.pas"/>
+        <DCCReference Include="uProgresso.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
