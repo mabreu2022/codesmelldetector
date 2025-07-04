@@ -1,0 +1,136 @@
+﻿                                                                                  unit uAnalyzer;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, System.Generics.Collections, uSmellTypes;
+
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
+
+implementation
+
+uses
+  System.IOUtils, System.Threading, uProjeto, uSugestoes, uLogger, math;
+
+const
+  TAMANHO_MAXIMO_ARQUIVO = 5 * 1024 * 1024; // 5 MB
+  MAX_TAREFAS = 4;
+
+function EhArquivoTexto(const FileName: string): Boolean;
+var
+  Bytes: TBytes;
+  i, Limite: Integer;
+begin
+  Result := True;
+  try
+    Bytes := TFile.ReadAllBytes(FileName);
+    Limite := Min(Length(Bytes), 512);
+    for i := 0 to Limite - 1 do
+      if (Bytes[i] = 0) or (Bytes[i] < 8) then
+        Exit(False);
+  except
+    Result := False;
+  end;
+end;
+
+function DetectarTodosMetodos(const Arquivo: string): TList<TCodeSmell>;
+var
+  Reader: TStreamReader;
+  Linha: string;
+  i, BeginCount, EndCount: Integer;
+  DentroMetodo: Boolean;
+  Metodo: TStringList;
+  Smell: TCodeSmell;
+begin
+  Result := TList<TCodeSmell>.Create;
+
+  if not TFile.Exists(Arquivo) then Exit;
+  if TFile.GetSize(Arquivo) > TAMANHO_MAXIMO_ARQUIVO then Exit;
+  if not EhArquivoTexto(Arquivo) then Exit;
+
+  Reader := TStreamReader.Create(Arquivo, TEncoding.UTF8);
+  Metodo := TStringList.Create;
+  try
+    i := 0;
+    DentroMetodo := False;
+    BeginCount := 0;
+    EndCount := 0;
+
+    while not Reader.EndOfStream do
+    begin
+      Linha := Reader.ReadLine;
+      Inc(i);
+
+      if not DentroMetodo then
+      begin
+        if Trim(Linha).ToLower.StartsWith('procedure') or
+           Trim(Linha).ToLower.StartsWith('function') then
+        begin
+          Metodo.Clear;
+          Metodo.Add(Linha);
+          DentroMetodo := True;
+          BeginCount := 0;
+          EndCount := 0;
+          Smell.Linha := i;
+        end;
+      end
+      else
+      begin
+        Metodo.Add(Linha);
+        if Trim(Linha).ToLower = 'begin' then Inc(BeginCount);
+        if Trim(Linha).ToLower = 'end;' then Inc(EndCount);
+
+        if (BeginCount > 0) and (BeginCount = EndCount) then
+        begin
+          Smell.Arquivo := Arquivo;
+          Smell.Smell := 'Metodo detectado';
+          Smell.Trecho := Metodo.Text;
+          Result.Add(Smell);
+          DentroMetodo := False;
+        end;
+      end;
+    end;
+  finally
+    Reader.Free;
+    Metodo.Free;
+  end;
+end;
+
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
+var
+  Arquivos: TArray<string>;
+  Smells: TList<TCodeSmell>;
+  Smell: TCodeSmell;
+  Tarefas: TArray<ITask>;
+begin
+  Arquivos := ObterArquivosDoProjeto(Diretorio);
+  SetLength(Tarefas, 0);
+
+  for var Arq in Arquivos do
+  begin
+    Log('🔎 Analisando arquivo: ' + Arq);
+    Smells := DetectarTodosMetodos(Arq);
+    try
+      for Smell in Smells do
+      begin
+        if Length(Tarefas) >= MAX_TAREFAS then
+        begin
+          TTask.WaitForAll(Tarefas);
+          SetLength(Tarefas, 0);
+        end;
+
+        var Task := TTask.Run(procedure begin GerarSugestao(Smell, PastaRelatorios); end);
+        Tarefas := Tarefas + [Task];
+      end;
+    finally
+      Smells.Free;
+    end;
+
+    Log(Format('🧠 Memória usada: %.2f MB', [GetHeapStatus.TotalAllocated / 1024 / 1024]));
+  end;
+
+  if Length(Tarefas) > 0 then
+    TTask.WaitForAll(Tarefas);
+end;
+
+end.

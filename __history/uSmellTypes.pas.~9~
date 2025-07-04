@@ -1,0 +1,28 @@
+ï»¿unit uSmellTypes;
+
+interface
+
+uses
+  System.JSON;
+
+type
+  TCodeSmell = record
+    Arquivo: string;
+    Smell: string;
+    Linha: Integer;
+    Trecho: string;
+    function ToJSON: TJSONObject;
+  end;
+
+implementation
+
+function TCodeSmell.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair('arquivo', Arquivo);
+  Result.AddPair('smell', Smell);
+  Result.AddPair('linha', TJSONNumber.Create(Linha));
+  Result.AddPair('trecho', Trecho);
+end;
+
+end.

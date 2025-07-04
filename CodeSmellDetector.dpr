@@ -1,10 +1,11 @@
-program CodeSmellDetector;
+Ôªøprogram CodeSmellDetector;
 
 {$APPTYPE CONSOLE}
 
 uses
   System.SysUtils,
   System.IOUtils,
+  Windows,
   uAnalyzer in 'uAnalyzer.pas',
   uRelatorioJSON in 'uRelatorioJSON.pas',
   uRelatorioCSV in 'uRelatorioCSV.pas',
@@ -13,41 +14,85 @@ uses
   uSugestoes in 'uSugestoes.pas',
   uSmellTypes in 'uSmellTypes.pas',
   uIARefatorador in 'uIARefatorador.pas',
+  uConversorUTF8 in 'uConversorUTF8.pas',
+  uLogger in 'uLogger.pas',
+  uBackup in 'uBackup.pas',
   Xml.omnixmldom in 'Xml.omnixmldom.pas';
 
-// ? integraÁ„o com IA local
+function CopiarProjetoParaTemp(const Origem: string): string;
+var
+  Destino: string;
+begin
+  Destino := TPath.Combine(TPath.GetTempPath,
+    'CodeSmellTemp_' + TPath.GetFileName(Origem) + '_' + FormatDateTime('yyyymmdd_hhnnss', Now));
+
+  try
+    TDirectory.Copy(Origem, Destino, True);
+    Log('üìÅ Projeto copiado para pasta tempor√°ria: ' + Destino);
+    Result := Destino;
+  except
+    on E: Exception do
+    begin
+      LogErro('Erro ao copiar projeto para pasta tempor√°ria: ' + E.Message);
+      Halt(1);
+    end;
+  end;
+end;
 
 var
-  Dir, ExecutavelPath, PastaRelatorios: string;
+  DirOriginal, Dir, ExecutavelPath, PastaRelatorios, CaminhoLog: string;
+  Silencioso: Boolean;
 
 begin
   try
-    if ParamCount < 1 then
+    if (ParamCount >= 2) and SameText(ParamStr(1), '--reverter') then
     begin
-      Writeln('Uso: CodeSmellDetector <diretÛrio do projeto Delphi>');
+      ReverterBackup(ParamStr(2));
       Exit;
     end;
 
-    Dir := ParamStr(1);
+    Silencioso := False;
+    for var i := 1 to ParamCount do
+      if SameText(ParamStr(i), '--silencioso') then
+        Silencioso := True;
 
-    if not TDirectory.Exists(Dir) then
+    if ParamCount < 1 then
     begin
-      Writeln('Erro: diretÛrio n„o encontrado: ', Dir);
+      Writeln('Uso: CodeSmellDetector <diretorio do projeto Delphi> [--silencioso]');
+      Writeln('     CodeSmellDetector --reverter <diretorio do projeto Delphi>');
+      Exit;
+    end;
+
+    DirOriginal := ParamStr(1);
+    if not TDirectory.Exists(DirOriginal) then
+    begin
+      Writeln('Diret√≥rio n√£o encontrado: ' + DirOriginal);
       Exit;
     end;
 
     ExecutavelPath := TPath.GetDirectoryName(ParamStr(0));
     PastaRelatorios := TPath.Combine(ExecutavelPath, 'relatorios');
+    CaminhoLog := TPath.Combine(ExecutavelPath, 'analisador.log');
+
+    InicializarLogger(CaminhoLog, Silencioso);
+
+    Dir := CopiarProjetoParaTemp(DirOriginal);
 
     if not TDirectory.Exists(PastaRelatorios) then
       TDirectory.CreateDirectory(PastaRelatorios);
 
-    Writeln('?? Iniciando an·lise do projeto em: ', Dir);
+    Log('üîß Convertendo arquivos para UTF-8...');
+    ConverterArquivosParaUTF8(Dir, True);
+
+    Log('üîç Iniciando an√°lise do projeto em: ' + Dir);
     AnalisarDiretorio(Dir, PastaRelatorios);
-    Writeln('? An·lise concluÌda com sucesso.');
-    Writeln('?? RelatÛrios e sugestıes gerados em: ', PastaRelatorios);
+    Log('‚úÖ An√°lise conclu√≠da com sucesso.');
+    Log('üìÅ Relat√≥rios e sugest√µes gerados em: ' + PastaRelatorios);
   except
     on E: Exception do
-      Writeln('? Erro durante a execuÁ„o: ', E.Message);
+    begin
+      LogErro('Erro durante a execu√ß√£o: ' + E.ClassName + ' - ' + E.Message);
+      Log(E.StackTrace);
+    end;
   end;
 end.

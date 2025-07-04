@@ -1,0 +1,31 @@
+﻿ï»¿unit uRelatorioCSV;
+
+interface
+
+uses
+  uSmellTypes, System.SysUtils;
+
+procedure GerarRelatorioCSV(const Smells: TArray<TCodeSmell>; const Caminho: string);
+
+implementation
+
+uses
+  System.Classes;
+
+procedure GerarRelatorioCSV(const Smells: TArray<TCodeSmell>; const Caminho: string);
+var
+  Arq: TStringList;
+  Smell: TCodeSmell;
+begin
+  Arq := TStringList.Create;
+  try
+    Arq.Add('Arquivo;Smell;Linha;Trecho');
+    for Smell in Smells do
+      Arq.Add(Format('%s;%s;%d;"%s"', [Smell.Arquivo, Smell.Smell, Smell.Linha, Smell.Trecho]));
+    Arq.SaveToFile(Caminho, TEncoding.UTF8);
+  finally
+    Arq.Free;
+  end;
+end;
+
+end.

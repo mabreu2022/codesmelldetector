@@ -1,29 +1,32 @@
-unit uRelatorioHTML;
+ï»¿unit uRelatorioHTML;
 
 interface
 
 uses
   uSmellTypes, System.SysUtils;
 
-procedure GerarRelatorioHTML(const Smells: TArray<TCodeSmell>; const Caminho: string);
+procedure GerarRelatorioHTML(const Smells: TArray<TCodeSmell>;
+  const Caminho: string);
 
 implementation
 
 uses
   System.Classes;
 
-procedure GerarRelatorioHTML(const Smells: TArray<TCodeSmell>; const Caminho: string);
+procedure GerarRelatorioHTML(const Smells: TArray<TCodeSmell>;
+  const Caminho: string);
 var
   Arq: TStringList;
   Smell: TCodeSmell;
 begin
   Arq := TStringList.Create;
   try
-    Arq.Add('<html><head><meta charset="utf-8"><title>Relatório</title></head><body>');
-    Arq.Add('<h1>Relatório de Code Smells</h1>');
+    Arq.Add('<html><head><meta charset="utf-8"><title>RelatÃ³rio</title></head><body>');
+    Arq.Add('<h1>RelatÃ³rio de Code Smells</h1>');
     Arq.Add('<table border="1"><tr><th>Arquivo</th><th>Smell</th><th>Linha</th><th>Trecho</th></tr>');
     for Smell in Smells do
-      Arq.Add(Format('<tr><td>%s</td><td>%s</td><td>%d</td><td><pre>%s</pre></td></tr>',
+      Arq.Add(Format
+        ('<tr><td>%s</td><td>%s</td><td>%d</td><td><pre>%s</pre></td></tr>',
         [Smell.Arquivo, Smell.Smell, Smell.Linha, Smell.Trecho]));
     Arq.Add('</table></body></html>');
     Arq.SaveToFile(Caminho, TEncoding.UTF8);

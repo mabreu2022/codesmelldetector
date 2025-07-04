@@ -1,0 +1,67 @@
+﻿unit uLogger;
+
+interface
+
+procedure InicializarLogger(const CaminhoLog: string; Silencioso: Boolean);
+procedure Log(const Msg: string);
+procedure LogErro(const Msg: string);
+
+var
+  ModoSilencioso: Boolean = False;
+
+implementation
+
+uses
+  System.SysUtils, System.IOUtils, Windows, System.SyncObjs;
+
+var
+  LogPath: string;
+  LogLock: TCriticalSection;
+
+procedure WritelnUTF8(const S: string);
+var
+  hConsole: THandle;
+  WideStr: WideString;
+  Written: DWORD;
+begin
+  hConsole := GetStdHandle(STD_OUTPUT_HANDLE);
+  if hConsole = INVALID_HANDLE_VALUE then Exit;
+
+  WideStr := S + sLineBreak;
+  WriteConsoleW(hConsole, PWideChar(WideStr), Length(WideStr), Written, nil);
+end;
+
+procedure InicializarLogger(const CaminhoLog: string; Silencioso: Boolean);
+begin
+  LogPath := CaminhoLog;
+  ModoSilencioso := Silencioso;
+
+  if TFile.Exists(LogPath) then
+    TFile.Delete(LogPath);
+end;
+
+procedure Log(const Msg: string);
+begin
+  if not ModoSilencioso then
+    WritelnUTF8(Msg);
+
+  LogLock.Acquire;
+  try
+    TFile.AppendAllText(LogPath, Msg + sLineBreak, TEncoding.UTF8);
+  finally
+    LogLock.Release;
+  end;
+end;
+
+procedure LogErro(const Msg: string);
+begin
+  Log('❌ ' + Msg);
+end;
+
+initialization
+  LogLock := TCriticalSection.Create;
+
+finalization
+  LogLock.Free;
+
+end.

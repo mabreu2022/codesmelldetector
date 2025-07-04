@@ -1,0 +1,144 @@
+﻿unit uAnalyzer;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, System.Generics.Collections, uSmellTypes, math;
+
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
+
+implementation
+
+uses
+  System.IOUtils, uProjeto, uSugestoes, uLogger;
+
+const
+  TAMANHO_MAXIMO_ARQUIVO = 5 * 1024 * 1024; // 5 MB
+
+function EhArquivoTexto(const FileName: string): Boolean;
+var
+  Bytes: TBytes;
+  i, Limite: Integer;
+begin
+  Result := True;
+  try
+    Bytes := TFile.ReadAllBytes(FileName);
+    Limite := Min(Length(Bytes), 512);
+    for i := 0 to Limite - 1 do
+      if (Bytes[i] = 0) or (Bytes[i] < 8) then
+        Exit(False);
+  except
+    Result := False;
+  end;
+end;
+
+function CapturarMetodoCompleto(const Linhas: TStrings; Inicio: Integer): string;
+var
+  i, BeginCount, EndCount: Integer;
+  Linha: string;
+  Captura: TStringList;
+begin
+  Captura := TStringList.Create;
+  try
+    BeginCount := 0;
+    EndCount := 0;
+
+    for i := Inicio to Linhas.Count - 1 do
+    begin
+      Linha := Trim(Linhas[i]);
+      Captura.Add(Linhas[i]);
+
+      if SameText(Linha, 'begin') then
+        Inc(BeginCount)
+      else if SameText(Linha, 'end') or SameText(Linha, 'end;') then
+        Inc(EndCount);
+
+      if (BeginCount > 0) and (BeginCount = EndCount) then
+        Break;
+    end;
+
+    Result := Captura.Text;
+  finally
+    Captura.Free;
+  end;
+end;
+
+function DetectarTodosMetodos(const Arquivo: string): TList<TCodeSmell>;
+var
+  Linhas: TStringList;
+  i: Integer;
+  Linha: string;
+  Smell: TCodeSmell;
+begin
+  Result := TList<TCodeSmell>.Create;
+
+  if not TFile.Exists(Arquivo) then
+  begin
+    LogErro('Arquivo não encontrado: ' + Arquivo);
+    Exit;
+  end;
+
+  if TFile.GetSize(Arquivo) > TAMANHO_MAXIMO_ARQUIVO then
+  begin
+    LogErro('Arquivo ignorado por ser muito grande: ' + Arquivo);
+    Exit;
+  end;
+
+  if not EhArquivoTexto(Arquivo) then
+  begin
+    LogErro('Arquivo ignorado (possivelmente binário): ' + Arquivo);
+    Exit;
+  end;
+
+  Linhas := TStringList.Create;
+  try
+    try
+      Linhas.LoadFromFile(Arquivo, TEncoding.UTF8);
+    except
+      on E: Exception do
+      begin
+        LogErro('Erro ao carregar arquivo: ' + Arquivo + ' → ' + E.Message);
+        Exit;
+      end;
+    end;
+
+    for i := 0 to Linhas.Count - 1 do
+    begin
+      Linha := Trim(Linhas[i]);
+
+      if (Linha.StartsWith('procedure', True)) or (Linha.StartsWith('function', True)) then
+      begin
+        Smell.Arquivo := Arquivo;
+        Smell.Smell := 'Metodo detectado';
+        Smell.Linha := i + 1;
+        Smell.Trecho := CapturarMetodoCompleto(Linhas, i);
+        Result.Add(Smell);
+      end;
+    end;
+  finally
+    Linhas.Free;
+  end;
+end;
+
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
+var
+  Arquivos: TArray<string>;
+  Smells: TList<TCodeSmell>;
+  Smell: TCodeSmell;
+begin
+  Arquivos := ObterArquivosDoProjeto(Diretorio);
+
+  for var Arq in Arquivos do
+  begin
+    Log('🔎 Analisando arquivo: ' + Arq);
+    Smells := DetectarTodosMetodos(Arq);
+    try
+      for Smell in Smells do
+        GerarSugestao(Smell, PastaRelatorios);
+    finally
+      Smells.Free;
+    end;
+  end;
+end;
+
+end.

@@ -1,0 +1,192 @@
+﻿unit uAnalyzer;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, System.Generics.Collections, uSmellTypes, Math;
+
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
+
+implementation
+
+uses
+  System.IOUtils, System.Threading, uProjeto, uSugestoes, uLogger;
+
+const
+  TAMANHO_MAXIMO_ARQUIVO = 5 * 1024 * 1024; // 5 MB
+  NUM_WORKERS = 2;
+
+function EhArquivoTexto(const FileName: string): Boolean;
+var
+  Bytes: TBytes;
+  i, Limite: Integer;
+begin
+  Result := True;
+  try
+    Bytes := TFile.ReadAllBytes(FileName);
+    Limite := Min(Length(Bytes), 512);
+    for i := 0 to Limite - 1 do
+      if (Bytes[i] = 0) or (Bytes[i] < 8) then
+        Exit(False);
+  except
+    Result := False;
+  end;
+end;
+
+function DetectarTodosMetodos(const Arquivo: string): TList<TCodeSmell>;
+var
+  Reader: TStreamReader;
+  Linha: string;
+  i, BeginCount, EndCount: Integer;
+  DentroMetodo: Boolean;
+  Metodo: TStringList;
+  Smell: TCodeSmell;
+begin
+  Result := TList<TCodeSmell>.Create;
+
+  if not TFile.Exists(Arquivo) then Exit;
+  if TFile.GetSize(Arquivo) > TAMANHO_MAXIMO_ARQUIVO then Exit;
+  if not EhArquivoTexto(Arquivo) then Exit;
+
+  Reader := TStreamReader.Create(Arquivo, TEncoding.UTF8);
+  Metodo := TStringList.Create;
+  try
+    i := 0;
+    DentroMetodo := False;
+    BeginCount := 0;
+    EndCount := 0;
+
+    while not Reader.EndOfStream do
+    begin
+      Linha := Reader.ReadLine;
+      Inc(i);
+
+      if not DentroMetodo then
+      begin
+        if Trim(Linha).ToLower.StartsWith('procedure') or
+           Trim(Linha).ToLower.StartsWith('function') then
+        begin
+          Metodo.Clear;
+          Metodo.Add(Linha);
+          DentroMetodo := True;
+          BeginCount := 0;
+          EndCount := 0;
+          Smell.Linha := i;
+        end;
+      end
+      else
+      begin
+        Metodo.Add(Linha);
+        if Trim(Linha).ToLower = 'begin' then Inc(BeginCount);
+        if Trim(Linha).ToLower = 'end;' then Inc(EndCount);
+
+        if (BeginCount > 0) and (BeginCount = EndCount) then
+        begin
+          Smell.Arquivo := Arquivo;
+          Smell.Smell := 'Metodo detectado';
+          Smell.Trecho := Metodo.Text;
+          Result.Add(Smell);
+          DentroMetodo := False;
+        end;
+      end;
+    end;
+  finally
+    Reader.Free;
+    Metodo.Free;
+  end;
+end;
+
+procedure AnalisarDiretorio(const Diretorio: string; const PastaRelatorios: string);
+var
+  Arquivos: TArray<string>;
+  Smells: TList<TCodeSmell>;
+  Smell: TCodeSmell;
+  FilaSmells: TQueue<TCodeSmell>;
+  Tarefas: array of ITask;
+  i: Integer;
+begin
+  Arquivos := ObterArquivosDoProjeto(Diretorio);
+  FilaSmells := TQueue<TCodeSmell>.Create;
+
+  for var Arq in Arquivos do
+  begin
+    Log('🔎 Analisando arquivo: ' + Arq);
+    try
+      Smells := DetectarTodosMetodos(Arq);
+      Log(Format('📄 %d métodos detectados em %s', [Smells.Count, Arq]));
+    except
+      on E: Exception do
+      begin
+        LogErro('❌ Erro ao analisar ' + Arq + ': ' + E.ClassName + ' - ' + E.Message);
+        Continue;
+      end;
+    end;
+
+    for Smell in Smells do
+    begin
+      Log('📥 Enfileirado: ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString);
+      FilaSmells.Enqueue(Smell);
+    end;
+
+    Smells.Free;
+    Log(Format('🧠 Memória usada: %.2f MB', [GetHeapStatus.TotalAllocated / 1024 / 1024]));
+  end;
+
+  SetLength(Tarefas, NUM_WORKERS);
+  for i := 0 to NUM_WORKERS - 1 do
+  begin
+    Tarefas[i] := TTask.Run(procedure
+    var
+      Smell: TCodeSmell;
+      Trecho: string;
+    begin
+      while True do
+      begin
+        TMonitor.Enter(FilaSmells);
+        try
+          if FilaSmells.Count = 0 then Break;
+          Smell := FilaSmells.Dequeue;
+        finally
+          TMonitor.Exit(FilaSmells);
+        end;
+
+        Trecho := Smell.Trecho;
+        Log('⚙️ Refatorando: ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString);
+        try
+          GerarSugestao(Smell, PastaRelatorios);
+          Log('✅ Sugestão gerada para: ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString);
+        except
+          on E: Exception do
+          begin
+            LogErro('❌ Erro ao refatorar ' + Smell.Arquivo + ' linha ' + Smell.Linha.ToString + ': ' + E.Message);
+            if Length(Trecho) > 500 then
+              Trecho := Copy(Trecho, 1, 500) + '...';
+            Log('🧩 Trecho problemático:');
+            Log(Trecho);
+          end;
+        end;
+      end;
+    end);
+  end;
+
+  try
+    TTask.WaitForAll(Tarefas);
+  except
+    on E: EAggregateException do
+    var
+      Inner: Exception;
+    begin
+      LogErro('❌ Erros em tarefas paralelas: ' + E.Message);
+      for Inner in E.InnerExceptions do
+        LogErro('↳ ' + Inner.ClassName + ': ' + Inner.Message);
+    end;
+    on E: Exception do
+      LogErro('❌ Erro inesperado: ' + E.ClassName + ' - ' + E.Message);
+  end;
+
+  FilaSmells.Free;
+  Log('✅ Análise concluída.');
+end;
+
+end.
+

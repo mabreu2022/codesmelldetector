@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Documentação - CodeSmellDetector</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; background: #f9f9f9; color: #333; }
+    h1, h2 { color: #2c3e50; }
+    code { background: #eee; padding: 2px 4px; border-radius: 4px; }
+    pre { background: #f0f0f0; padding: 10px; border-radius: 6px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #e0e0e0; }
+    ul { margin-top: 0; }
+  </style>
+</head>
+<body>
+
+<h1>📘 CodeSmellDetector</h1>
+<p>Ferramenta de análise estática e refatoração assistida para projetos Delphi. Detecta métodos longos, gera sugestões de melhoria com IA local e mantém os arquivos originais seguros.</p>
+
+<h2>🚀 Funcionalidades principais</h2>
+<ul>
+  <li>Criação automática de cópia temporária do projeto para análise segura</li>
+  <li>Conversão de arquivos para UTF-8 sem BOM (sem sujeira antes de <code>unit</code>)</li>
+  <li>Backup automático dos arquivos antes de qualquer modificação</li>
+  <li>Detecção de métodos longos e estruturas complexas</li>
+  <li>Geração de sugestões de refatoração com IA local (via HTTP)</li>
+  <li>Relatórios em HTML, CSV e JSON</li>
+  <li>Reversão completa de alterações com um único comando</li>
+</ul>
+
+<h2>🧾 Comandos aceitos</h2>
+<table>
+  <tr>
+    <th>Comando</th>
+    <th>Descrição</th>
+  </tr>
+  <tr>
+    <td><code>CodeSmellDetector &lt;pasta_do_projeto&gt;</code></td>
+    <td>Executa a análise completa do projeto informado. Nenhum arquivo original é alterado.</td>
+  </tr>
+  <tr>
+    <td><code>CodeSmellDetector --reverter &lt;pasta_do_projeto&gt;</code></td>
+    <td>Restaura os arquivos originais a partir do backup salvo em <code>.backup_CodeSmell</code>.</td>
+  </tr>
+  <tr>
+    <td><code>CodeSmellDetector &lt;pasta&gt; --silencioso</code></td>
+    <td>Executa a análise sem exibir logs no console (apenas grava no arquivo de log).</td>
+  </tr>
+</table>
+
+<h2>📁 Estrutura de diretórios</h2>
+<pre>
+C:\Projetos\MeuApp\
+├── .backup_CodeSmell\       ← Backup automático dos arquivos originais
+├── relatorios\              ← Relatórios e sugestões geradas
+│   ├── sugestoes_html\
+│   ├── sugestoes_csv\
+│   └── sugestoes_json\
+└── src\                     ← Código-fonte original (inalterado)
+</pre>
+
+<h2>🧠 Detalhes técnicos</h2>
+<ul>
+  <li>Arquivos maiores que 5 MB são ignorados automaticamente</li>
+  <li>Leitura de arquivos feita linha a linha com <code>TStreamReader</code> para economia de memória</li>
+  <li>Limite de 4 tarefas paralelas para geração de sugestões</li>
+  <li>IA local chamada via HTTP em <code>http://localhost:11434/api/generate</code></li>
+  <li>Timeout configurado para 5 minutos por requisição</li>
+  <li>Respostas da IA são cacheadas por hash MD5 do método</li>
+  <li>Relatórios HTML são salvos como UTF-8 sem BOM para compatibilidade com navegadores</li>
+</ul>
+
+<h2>📤 Exemplo de uso</h2>
+<pre>
+CodeSmellDetector C:\Projetos\MeuApp
+</pre>
+
+<h2>🔁 Exemplo de reversão</h2>
+<pre>
+CodeSmellDetector --reverter C:\Projetos\MeuApp
+</pre>
+
+<h2>📌 Requisitos</h2>
+<ul>
+  <li>Delphi XE ou superior</li>
+  <li>Projeto Delphi com arquivos .pas, .dpr, .dfm, .inc</li>
+  <li>Servidor de IA local rodando em <code>localhost:11434</code></li>
+</ul>
+
+</body>
+</html>

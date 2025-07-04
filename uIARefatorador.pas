@@ -1,4 +1,4 @@
-unit uIARefatorador;
+ï»¿unit uIARefatorador;
 
 interface
 
@@ -14,12 +14,14 @@ var
   RefatoracaoCache: TDictionary<string, string>;
   CacheLock: TCriticalSection;
 
-function RefatorarMetodoCopilot(const TrechoOriginal: string): string;
+  function RefatorarMetodoCopilot(const TrechoOriginal: string): string;
 var
   Hash, Prompt: string;
   Client: THttpClient;
   Response: IHTTPResponse;
   JSONReq, JSONResp: TJSONObject;
+  Stream: TStringStream;
+  JSONText: string;
 begin
   Result := '';
   Hash := THashMD5.GetHashString(TrechoOriginal);
@@ -32,7 +34,7 @@ begin
     CacheLock.Release;
   end;
 
-  Prompt := 'Refatore o seguinte método Delphi em submétodos menores com nomes descritivos. Mantenha a lógica original:' + sLineBreak + TrechoOriginal;
+  Prompt := 'Refatore o seguinte metodo Delphi em submetodos menores com nomes descritivos. Mantenha a logica original:' + sLineBreak + TrechoOriginal;
 
   JSONReq := TJSONObject.Create;
   try
@@ -42,25 +44,44 @@ begin
 
     Client := THttpClient.Create;
     try
-      Response := Client.Post('http://localhost:11434/api/generate',
-        TStringStream.Create(JSONReq.ToJSON, TEncoding.UTF8, False),
-        nil,
-        [TNameValuePair.Create('Content-Type', 'application/json')]);
+      Client.ConnectionTimeout := 300000; // 5 minutos
+      Client.ResponseTimeout := 300000;
+
+      Stream := TStringStream.Create(JSONReq.ToJSON, TEncoding.UTF8, False); // sem BOM
+      try
+        Response := Client.Post(
+          'http://localhost:11434/api/generate',
+          Stream,
+          nil,
+          [TNameValuePair.Create('Content-Type', 'application/json')]
+        );
+      finally
+        Stream.Free;
+      end;
 
       if Response.StatusCode = 200 then
       begin
-        JSONResp := TJSONObject.ParseJSONValue(Response.ContentAsString) as TJSONObject;
-        if Assigned(JSONResp) and JSONResp.TryGetValue('response', Result) then
-        begin
-          Result := Result.Trim;
-          CacheLock.Acquire;
-          try
-            RefatoracaoCache.AddOrSetValue(Hash, Result);
-          finally
-            CacheLock.Release;
-          end;
+        JSONText := Response.ContentAsString(TEncoding.UTF8);
+        if JSONText.Trim = '' then
+          raise Exception.Create('Resposta vazia da IA.');
+
+        JSONResp := TJSONObject.ParseJSONValue(JSONText) as TJSONObject;
+        try
+          if Assigned(JSONResp) and JSONResp.TryGetValue('response', Result) then
+          begin
+            Result := Result.Trim;
+            CacheLock.Acquire;
+            try
+              RefatoracaoCache.AddOrSetValue(Hash, Result);
+            finally
+              CacheLock.Release;
+            end;
+          end
+          else
+            raise Exception.Create('Campo "response" nÃ£o encontrado na resposta da IA.');
+        finally
+          JSONResp.Free;
         end;
-        JSONResp.Free;
       end
       else
         raise Exception.Create('Erro na chamada ao modelo local: ' + Response.StatusText);

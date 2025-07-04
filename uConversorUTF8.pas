@@ -1,0 +1,83 @@
+﻿unit uConversorUTF8;
+
+interface
+
+procedure ConverterArquivosParaUTF8(const Diretorio: string; EfetuarBackup: Boolean = True);
+
+implementation
+
+uses
+  System.SysUtils, System.Classes, System.IOUtils, uLogger, uBackup;
+
+function EhUTF8SemBOM(const FileName: string): Boolean;
+var
+  Bytes: TBytes;
+  Texto: string;
+begin
+  Bytes := TFile.ReadAllBytes(FileName);
+  if (Length(Bytes) >= 3) and (Bytes[0] = $EF) and (Bytes[1] = $BB) and (Bytes[2] = $BF) then
+    Exit(False); // Tem BOM
+
+  try
+    Texto := TEncoding.UTF8.GetString(Bytes);
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+procedure ConverterParaUTF8SemBOM(const FileName: string; EfetuarBackup: Boolean);
+var
+  Texto: TStringList;
+  UTF8SemBOM: TEncoding;
+begin
+  Texto := TStringList.Create;
+  UTF8SemBOM := TUTF8Encoding.Create(False); // UTF-8 sem BOM
+  try
+    try
+      Texto.LoadFromFile(FileName, TEncoding.UTF8);
+    except
+      on E: Exception do
+      begin
+        LogErro('Erro ao ler: ' + FileName + ' → ' + E.Message);
+        Exit;
+      end;
+    end;
+
+    // Remove BOM da primeira linha, se presente
+    if (Texto.Count > 0) and (Texto[0].StartsWith(#$FEFF)) then
+      Texto[0] := Texto[0].Substring(1);
+
+    if EfetuarBackup then
+      uBackup.FazerBackup(FileName, ExtractFilePath(FileName));
+
+    Texto.SaveToFile(FileName, UTF8SemBOM);
+    Log('✅ Convertido para UTF-8 sem BOM: ' + FileName);
+  finally
+    Texto.Free;
+    UTF8SemBOM.Free;
+  end;
+end;
+
+procedure ConverterArquivosParaUTF8(const Diretorio: string; EfetuarBackup: Boolean = True);
+var
+  Extensoes: TArray<string>;
+  Ext, Arq: string;
+  Arquivos: TArray<string>;
+begin
+  Extensoes := ['*.pas', '*.dpr', '*.dfm', '*.inc'];
+
+  for Ext in Extensoes do
+  begin
+    Arquivos := TDirectory.GetFiles(Diretorio, Ext, TSearchOption.soAllDirectories);
+    for Arq in Arquivos do
+    begin
+      if not EhUTF8SemBOM(Arq) then
+        ConverterParaUTF8SemBOM(Arq, EfetuarBackup)
+      else
+        Log('✔️ Já está em UTF-8 sem BOM: ' + Arq);
+    end;
+  end;
+end;
+
+end.

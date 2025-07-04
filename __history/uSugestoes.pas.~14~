@@ -1,0 +1,128 @@
+ï»¿unit uSugestoes;
+
+interface
+
+uses
+  uSmellTypes, System.SysUtils;
+
+procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
+
+implementation
+
+uses
+  System.Classes, System.IOUtils, uIARefatorador, System.Threading, System.DateUtils, uLogger;
+
+type
+  TSugestaoTask = class
+  private
+    FSmell: TCodeSmell;
+    FPasta: string;
+    procedure Executar;
+  public
+    constructor Create(const ASmell: TCodeSmell; const APasta: string);
+    procedure Start;
+  end;
+
+function NormalizarNome(const Texto: string): string;
+begin
+  Result := StringReplace(Texto, ' ', '', [rfReplaceAll]);
+end;
+
+function ExtrairNomeMetodo(const Trecho: string): string;
+var
+  Linhas: TArray<string>;
+  i, p: Integer;
+  Linha: string;
+begin
+  Result := '[metodo nao identificado]';
+  Linhas := Trecho.Split([sLineBreak]);
+  for i := 0 to High(Linhas) do
+  begin
+    Linha := Trim(Linhas[i]);
+    if (Linha.StartsWith('procedure', True)) or (Linha.StartsWith('function', True)) then
+    begin
+      p := Pos('(', Linha);
+      if p > 0 then
+        Result := Copy(Linha, 1, p - 1)
+      else
+        Result := Linha;
+      Exit;
+    end;
+  end;
+end;
+
+constructor TSugestaoTask.Create(const ASmell: TCodeSmell; const APasta: string);
+begin
+  FSmell := ASmell;
+  FPasta := APasta;
+end;
+
+procedure TSugestaoTask.Start;
+begin
+  TTask.Run(procedure begin Executar; end);
+end;
+
+procedure TSugestaoTask.Executar;
+var
+  Refatorado, NomeMetodo: string;
+  StartTime, EndTime: TDateTime;
+  ElapsedMs: Integer;
+  TextoFinal: TStringList;
+  NomeArquivo: string;
+  UTF8SemBOM: TEncoding;
+begin
+  NomeMetodo := ExtrairNomeMetodo(FSmell.Trecho);
+  Log(Format('ðŸ”§ Refatorando %s (linha %d)...', [NomeMetodo, FSmell.Linha]));
+
+  StartTime := Now;
+  try
+    Refatorado := RefatorarMetodoCopilot(FSmell.Trecho);
+  except
+    on E: Exception do
+    begin
+      Refatorado := '// [Erro ao gerar sugestao automatica]' + sLineBreak + '// ' + E.Message;
+      LogErro(Format('Erro ao refatorar %s: %s', [NomeMetodo, E.Message]));
+    end;
+  end;
+  EndTime := Now;
+  ElapsedMs := MilliSecondsBetween(EndTime, StartTime);
+
+  TextoFinal := TStringList.Create;
+  UTF8SemBOM := TUTF8Encoding.Create(False);
+  try
+    TextoFinal.Add('// SugestÃ£o de correÃ§Ã£o para o mÃ©todo detectado');
+    TextoFinal.Add('// Arquivo original: ' + FSmell.Arquivo);
+    TextoFinal.Add('// Linha: ' + FSmell.Linha.ToString);
+    TextoFinal.Add('');
+    TextoFinal.Add('// Trecho original:');
+    TextoFinal.Add('// ------------------');
+    TextoFinal.AddStrings(FSmell.Trecho.Split([sLineBreak]));
+    TextoFinal.Add('');
+    TextoFinal.Add('// SugestÃ£o refatorada:');
+    TextoFinal.Add('// ---------------------');
+    TextoFinal.AddStrings(Refatorado.Split([sLineBreak]));
+
+    NomeArquivo := Format('%s_Linha%d_%s.pas',
+      [TPath.GetFileNameWithoutExtension(FSmell.Arquivo), FSmell.Linha, NormalizarNome(NomeMetodo)]);
+
+    TThread.Synchronize(nil,
+      procedure
+      begin
+        TextoFinal.SaveToFile(TPath.Combine(FPasta, NomeArquivo), UTF8SemBOM);
+        Log(Format('âœ… %s refatorado em %d ms', [NomeMetodo, ElapsedMs]));
+      end);
+  finally
+    TextoFinal.Free;
+    UTF8SemBOM.Free;
+  end;
+end;
+
+procedure GerarSugestao(const Smell: TCodeSmell; const PastaSugestoes: string);
+var
+  Task: TSugestaoTask;
+begin
+  Task := TSugestaoTask.Create(Smell, PastaSugestoes);
+  Task.Start;
+end;
+
+end.

@@ -1,0 +1,161 @@
+ï»¿unit uProjeto;
+
+interface
+
+uses
+  System.SysUtils,
+  System.Classes,
+  System.Generics.Collections;
+
+function ObterArquivosDoProjeto(const ProjetoPath: string): TArray<string>;
+
+implementation
+
+uses
+  System.IOUtils,
+  Windows,
+  Xml.XMLDoc,
+  Xml.XMLIntf,
+  Xml.XMLDom,
+  Xml.omnixmldom;
+
+procedure WritelnUTF8(const S: string);
+var
+  hConsole: THandle;
+  WideStr: WideString;
+  Written: DWORD;
+begin
+  hConsole := GetStdHandle(STD_OUTPUT_HANDLE);
+  if hConsole = INVALID_HANDLE_VALUE then Exit;
+
+  WideStr := S + sLineBreak;
+  WriteConsoleW(hConsole, PWideChar(WideStr), Length(WideStr), Written, nil);
+end;
+
+function ObterArquivosDoProjeto(const ProjetoPath: string): TArray<string>;
+var
+  ArquivosDproj: TArray<string>;
+  XMLDoc: TXMLDocument;
+  XML: IXMLDocument;
+  Root, ItemGroup, Ref: IXMLNode;
+  BaseDir, FilePath, DprojFile: string;
+  PastasIgnoradas: TArray<string>;
+  Ignorar: Boolean;
+  Pasta: string;
+  i, j, k, Escolha: Integer;
+  TodosArquivos: TList<string>;
+  EncontrouReferencia: Boolean;
+  ArquivosPas: TArray<string>;
+  arq: string;
+begin
+  ArquivosDproj := TDirectory.GetFiles(ProjetoPath, '*.dproj', TSearchOption.soAllDirectories);
+
+  if Length(ArquivosDproj) = 0 then
+    raise Exception.Create('Nenhum arquivo .dproj encontrado no diretorio ou subpastas.');
+
+  Escolha := -1;
+  if Length(ArquivosDproj) > 1 then
+  begin
+    WritelnUTF8('Varios arquivos .dproj encontrados:');
+    for i := 0 to High(ArquivosDproj) do
+      WritelnUTF8(Format('  [%d] %s', [i + 1, ArquivosDproj[i]]));
+    WritelnUTF8('');
+    repeat
+      Write('Digite o numero do projeto que deseja analisar (ou 0 para todos): ');
+      Readln(Escolha);
+    until (Escolha >= 0) and (Escolha <= Length(ArquivosDproj));
+  end
+  else
+    Escolha := 1;
+
+  TodosArquivos := TList<string>.Create;
+  try
+    for i := 0 to High(ArquivosDproj) do
+    begin
+      if (Escolha <> 0) and (i <> Escolha - 1) then
+        Continue;
+
+      DprojFile := ArquivosDproj[i];
+
+      XMLDoc := TXMLDocument.Create(nil);
+      XMLDoc.DOMVendor := GetDOMVendor('Omni XML');
+      XML := XMLDoc;
+
+      XML.LoadFromFile(DprojFile);
+      XML.Active := True;
+
+      BaseDir := ExtractFilePath(DprojFile);
+      PastasIgnoradas := ['\lib\', '\thirdparty\', '\vendor\', '\external\', '\packages\'];
+
+      Root := XML.DocumentElement;
+      EncontrouReferencia := False;
+
+      for j := 0 to Root.ChildNodes.Count - 1 do
+      begin
+        ItemGroup := Root.ChildNodes[j];
+
+        if SameText(ItemGroup.NodeName, 'ItemGroup') then
+        begin
+          for k := 0 to ItemGroup.ChildNodes.Count - 1 do
+          begin
+            Ref := ItemGroup.ChildNodes[k];
+            if SameText(Ref.NodeName, 'DCCReference') and Ref.HasAttribute('Include') then
+            begin
+              FilePath := TPath.Combine(BaseDir, Ref.Attributes['Include']);
+              FilePath := TPath.GetFullPath(FilePath);
+
+              Ignorar := False;
+              for Pasta in PastasIgnoradas do
+                if FilePath.ToLower.Contains(Pasta) then
+                begin
+                  Ignorar := True;
+                  Break;
+                end;
+
+              if not Ignorar and TFile.Exists(FilePath) then
+              begin
+                TodosArquivos.Add(FilePath);
+                EncontrouReferencia := True;
+              end;
+            end;
+          end;
+        end;
+
+        if SameText(ItemGroup.NodeName, 'PropertyGroup') then
+        begin
+          for k := 0 to ItemGroup.ChildNodes.Count - 1 do
+          begin
+            Ref := ItemGroup.ChildNodes[k];
+            if SameText(Ref.NodeName, 'MainSource') then
+            begin
+              FilePath := TPath.Combine(BaseDir, Ref.Text);
+              FilePath := TPath.GetFullPath(FilePath);
+              if TFile.Exists(FilePath) then
+              begin
+                TodosArquivos.Add(FilePath);
+                EncontrouReferencia := True;
+              end;
+            end;
+          end;
+        end;
+      end;
+
+      if not EncontrouReferencia then
+      begin
+        WritelnUTF8('Nenhuma referencia encontrada no .dproj. Procurando arquivos .pas no diretorio...');
+        ArquivosPas := TDirectory.GetFiles(BaseDir, '*.pas', TSearchOption.soTopDirectoryOnly);
+        for arq in ArquivosPas do
+          TodosArquivos.Add(arq);
+      end;
+    end;
+
+    Result := TodosArquivos.ToArray;
+
+    if Length(Result) = 0 then
+      WritelnUTF8('Nenhum arquivo .pas ou .dpr foi encontrado.');
+  finally
+    TodosArquivos.Free;
+  end;
+end;
+
+end.

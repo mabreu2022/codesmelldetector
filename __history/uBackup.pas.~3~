@@ -1,0 +1,58 @@
+﻿unit uBackup;
+
+interface
+
+procedure FazerBackup(const ArquivoOriginal, PastaRaiz: string);
+procedure ReverterBackup(const PastaRaiz: string);
+
+implementation
+
+uses
+  System.SysUtils, System.IOUtils;
+
+procedure FazerBackup(const ArquivoOriginal, PastaRaiz: string);
+var
+  Relativo, Destino: string;
+begin
+  // Calcula o caminho relativo do arquivo em relação à raiz do projeto
+  Relativo := TPath.GetRelativePath(PastaRaiz, ArquivoOriginal);
+
+  // Define o caminho de destino dentro da pasta de backup
+  Destino := TPath.Combine(PastaRaiz, '.backup_CodeSmell\' + Relativo);
+
+  // Garante que a pasta de destino exista
+  TDirectory.CreateDirectory(TPath.GetDirectoryName(Destino));
+
+  // Copia o arquivo original para o backup, se ainda não existir
+  if not TFile.Exists(Destino) then
+    TFile.Copy(ArquivoOriginal, Destino, True);
+end;
+
+procedure ReverterBackup(const PastaRaiz: string);
+var
+  BackupRoot, ArquivoBackup, ArquivoOriginal: string;
+  Arquivos: TArray<string>;
+begin
+  BackupRoot := TPath.Combine(PastaRaiz, '.backup_CodeSmell');
+
+  if not TDirectory.Exists(BackupRoot) then
+  begin
+    Writeln('Nenhum backup encontrado para reverter.');
+    Exit;
+  end;
+
+  Arquivos := TDirectory.GetFiles(BackupRoot, '*.*', TSearchOption.soAllDirectories);
+  for ArquivoBackup in Arquivos do
+  begin
+    // Reconstrói o caminho original a partir do caminho relativo
+    ArquivoOriginal := TPath.Combine(PastaRaiz, TPath.GetRelativePath(BackupRoot, ArquivoBackup));
+
+    // Restaura o arquivo original a partir do backup
+    TFile.Copy(ArquivoBackup, ArquivoOriginal, True);
+    Writeln('Restaurado: ' + ArquivoOriginal);
+  end;
+
+  Writeln('✅ Reversão concluída.');
+end;
+
+end.

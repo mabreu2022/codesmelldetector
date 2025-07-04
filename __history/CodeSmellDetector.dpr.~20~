@@ -1,0 +1,68 @@
+ï»¿program CodeSmellDetector;
+
+{$APPTYPE CONSOLE}
+
+uses
+  System.SysUtils,
+  System.IOUtils,
+  Windows,
+  uAnalyzer in 'uAnalyzer.pas',
+  uRelatorioJSON in 'uRelatorioJSON.pas',
+  uRelatorioCSV in 'uRelatorioCSV.pas',
+  uRelatorioHTML in 'uRelatorioHTML.pas',
+  uProjeto in 'uProjeto.pas',
+  uSugestoes in 'uSugestoes.pas',
+  uSmellTypes in 'uSmellTypes.pas',
+  uIARefatorador in 'uIARefatorador.pas',
+  uConversorUTF8 in 'uConversorUTF8.pas',
+  uLogger in 'uLogger.pas',
+  Xml.omnixmldom in 'Xml.omnixmldom.pas';
+
+var
+  Dir, ExecutavelPath, PastaRelatorios, CaminhoLog: string;
+  Silencioso: Boolean;
+
+begin
+  try
+    Silencioso := False;
+    for var i := 1 to ParamCount do
+      if SameText(ParamStr(i), '--silencioso') then
+        Silencioso := True;
+
+    if ParamCount < 1 then
+    begin
+      Writeln('Uso: CodeSmellDetector <diretorio do projeto Delphi> [--silencioso]');
+      Exit;
+    end;
+
+    Dir := ParamStr(1);
+    ExecutavelPath := TPath.GetDirectoryName(ParamStr(0));
+    PastaRelatorios := TPath.Combine(ExecutavelPath, 'relatorios');
+    CaminhoLog := TPath.Combine(ExecutavelPath, 'analisador.log');
+
+    InicializarLogger(CaminhoLog, Silencioso);
+
+    if not TDirectory.Exists(Dir) then
+    begin
+      LogErro('DiretÃ³rio nÃ£o encontrado: ' + Dir);
+      Exit;
+    end;
+
+    if not TDirectory.Exists(PastaRelatorios) then
+      TDirectory.CreateDirectory(PastaRelatorios);
+
+    Log('ðŸ”§ Convertendo arquivos para UTF-8...');
+    ConverterArquivosParaUTF8(Dir, True);
+
+    Log('ðŸ” Iniciando anÃ¡lise do projeto em: ' + Dir);
+    AnalisarDiretorio(Dir, PastaRelatorios);
+    Log('âœ… AnÃ¡lise concluÃ­da com sucesso.');
+    Log('ðŸ“ RelatÃ³rios e sugestÃµes gerados em: ' + PastaRelatorios);
+  except
+    on E: Exception do
+    begin
+      LogErro('Erro durante a execuÃ§Ã£o: ' + E.ClassName + ' - ' + E.Message);
+      Log(E.StackTrace);
+    end;
+  end;
+end.

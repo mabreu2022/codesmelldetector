@@ -1,0 +1,75 @@
+﻿ï»¿Ã¯Â»Â¿unit uConversorUTF8;
+
+interface
+
+procedure ConverterArquivosParaUTF8(const Diretorio: string; FazerBackup: Boolean = True);
+
+implementation
+
+uses
+  System.SysUtils, System.Classes, System.IOUtils;
+
+function EhUTF8SemBOM(const FileName: string): Boolean;
+var
+  Bytes: TBytes;
+  Texto: string;
+begin
+  Bytes := TFile.ReadAllBytes(FileName);
+  if (Length(Bytes) >= 3) and (Bytes[0] = $EF) and (Bytes[1] = $BB) and (Bytes[2] = $BF) then
+    Exit(False); // Tem BOM
+
+  try
+    Texto := TEncoding.UTF8.GetString(Bytes);
+    Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+procedure ConverterParaUTF8SemBOM(const FileName: string; FazerBackup: Boolean);
+var
+  Texto: TStringList;
+  BackupName: string;
+begin
+  Texto := TStringList.Create;
+  try
+    try
+      Texto.LoadFromFile(FileName, TEncoding.Default); // Assume codificaÃƒÂ§ÃƒÂ£o original
+    except
+      on E: Exception do
+      begin
+        Writeln('Erro ao ler: ' + FileName + ' Ã¢â€ â€™ ' + E.Message);
+        Exit;
+      end;
+    end;
+
+    if FazerBackup then
+    begin
+      BackupName := FileName + '.bak';
+      TFile.Copy(FileName, BackupName, True);
+    end;
+
+    Texto.SaveToFile(FileName, TEncoding.UTF8); // Salva como UTF-8 sem BOM
+    Writeln('Convertido para UTF-8: ' + FileName);
+  finally
+    Texto.Free;
+  end;
+end;
+
+procedure ConverterArquivosParaUTF8(const Diretorio: string; FazerBackup: Boolean = True);
+var
+  Arquivos: TArray<string>;
+  Arq: string;
+begin
+  Arquivos := TDirectory.GetFiles(Diretorio, '*.pas', TSearchOption.soAllDirectories);
+
+  for Arq in Arquivos do
+  begin
+    if not EhUTF8SemBOM(Arq) then
+      ConverterParaUTF8SemBOM(Arq, FazerBackup)
+    else
+      Writeln('JÃƒÂ¡ estÃƒÂ¡ em UTF-8: ' + Arq);
+  end;
+end;
+
+end.

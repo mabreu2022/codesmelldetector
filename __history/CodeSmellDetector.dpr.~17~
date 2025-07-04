@@ -1,0 +1,65 @@
+﻿program CodeSmellDetector;
+
+{$APPTYPE CONSOLE}
+
+uses
+  System.SysUtils,
+  System.IOUtils,
+  Windows,
+  uAnalyzer in 'uAnalyzer.pas',
+  uRelatorioJSON in 'uRelatorioJSON.pas',
+  uRelatorioCSV in 'uRelatorioCSV.pas',
+  uRelatorioHTML in 'uRelatorioHTML.pas',
+  uProjeto in 'uProjeto.pas',
+  uSugestoes in 'uSugestoes.pas',
+  uSmellTypes in 'uSmellTypes.pas',
+  uIARefatorador in 'uIARefatorador.pas',
+  Xml.omnixmldom in 'Xml.omnixmldom.pas';
+
+procedure WritelnUTF8(const S: string);
+var
+  hConsole: THandle;
+  WideStr: WideString;
+  Written: DWORD;
+begin
+  hConsole := GetStdHandle(STD_OUTPUT_HANDLE);
+  if hConsole = INVALID_HANDLE_VALUE then Exit;
+
+  WideStr := S + sLineBreak;
+  WriteConsoleW(hConsole, PWideChar(WideStr), Length(WideStr), Written, nil);
+end;
+
+var
+  Dir, ExecutavelPath, PastaRelatorios: string;
+
+begin
+  try
+    if ParamCount < 1 then
+    begin
+      WritelnUTF8('Uso: CodeSmellDetector <diretório do projeto Delphi>');
+      Exit;
+    end;
+
+    Dir := ParamStr(1);
+
+    if not TDirectory.Exists(Dir) then
+    begin
+      WritelnUTF8('Erro: diretório não encontrado: ' + Dir);
+      Exit;
+    end;
+
+    ExecutavelPath := TPath.GetDirectoryName(ParamStr(0));
+    PastaRelatorios := TPath.Combine(ExecutavelPath, 'relatorios');
+
+    if not TDirectory.Exists(PastaRelatorios) then
+      TDirectory.CreateDirectory(PastaRelatorios);
+
+    WritelnUTF8('Iniciando análise do projeto em: ' + Dir);
+    AnalisarDiretorio(Dir, PastaRelatorios);
+    WritelnUTF8('Análise concluída com sucesso.');
+    WritelnUTF8('Relatórios e sugestões gerados em: ' + PastaRelatorios);
+  except
+    on E: Exception do
+      WritelnUTF8('Erro durante a execução: ' + E.Message);
+  end;
+end.

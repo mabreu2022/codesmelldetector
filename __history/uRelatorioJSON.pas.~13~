@@ -1,0 +1,31 @@
+ï»¿unit uRelatorioJSON;
+
+interface
+
+uses
+  uSmellTypes, System.SysUtils,System.IOUtils;
+
+procedure GerarRelatorioJSON(const Smells: TArray<TCodeSmell>; const Caminho: string);
+
+implementation
+
+uses
+  System.JSON, System.Classes;
+
+procedure GerarRelatorioJSON(const Smells: TArray<TCodeSmell>; const Caminho: string);
+var
+  JSONArr: TJSONArray;
+  Smell: TCodeSmell;
+begin
+  JSONArr := TJSONArray.Create;
+  try
+    for Smell in Smells do
+      JSONArr.AddElement(Smell.ToJSON);
+
+    TFile.WriteAllText(Caminho, JSONArr.ToJSON, TEncoding.UTF8);
+  finally
+    JSONArr.Free;
+  end;
+end;
+
+end.
